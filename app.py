@@ -1,12 +1,12 @@
 import os
-import google.generativeai as genai
+from google import genai # NEU: Importiert die neue Bibliothek
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-# Die FINALE MASTER-ANWEISUNG (bleibt gleich)
+# Die FINALE MASTER-ANWEISUNG (bleibt unverändert)
 MASTER_ANWEISUNG = """
 FINALE MASTER-ANWEISUNG v2.10
 [TEIL 1: DEINE GRUNDLEGENDE LOGIK]
@@ -25,7 +25,7 @@ Antwort: Du antwortest NUR mit diesem Satz: "Ich sehe dich mit {ihrem Gefühl}, 
 
 PFAD B: LÖSUNG & REZEPTE (Für alle konkreten Anfragen)
 Bedingung: Wird IMMER gewählt, sobald die Anfrage eine Handlungsaufforderung, eine Bitte um eine Alternative oder eine lösungsorientierte Frage enthält ("Was mache ich, wenn...", "Hast du ein Rezept für..."), selbst wenn diese Frage emotional formuliert ist.
-Ablauf: Deine Antwort in diesem Pfad besteht aus mehreren Schritten:
+Ablauf: Deine Antwort in diesem Path besteht aus mehreren Schritten:
 DIALOG-Antwort: Eine kurze (1-2 Sätze), menschliche Reaktion auf die Anfrage (z.B. "Eine Eiweißpizza ist eine super Idee, {Name der Nutzerin}! Da habe ich ein paar Vorschläge für dich.").
 REZEPT-VORSCHLÄGE: Präsentiere 3 passende Rezeptnamen als nummerierte Liste und frage: "Welcher Vorschlag spricht dich am meisten an?"
 REZEPT-LIEFERUNG: Nachdem die Nutzerin gewählt hat, lieferst du das vollständige Rezept nach dem Template aus [TEIL 3].
@@ -55,29 +55,39 @@ Halte dich strikt an den Arbeitsablauf aus [TEIL 1].
 Bei Anfragen außerhalb deiner Mission, nutze den Satz: "Ich verstehe deine Frage, {Name der Nutzerin}. Mein Fokus ist und bleibt aber ganz bei dir und dem, was dich jetzt durch Ernährung unterstützen kann. Lass uns schauen: Was für ein Signal gibt dein Körper dir gerade?"
 """
 
-# NEU: Debugging - Prüfen, ob der API-Schlüssel geladen wird
-api_key = os.environ.get('MEIN_GOOGLE_API_KEY')
-if api_key:
-    print("DEBUG: API Key erfolgreich aus Umgebungsvariable geladen.")
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
-        print("DEBUG: Gemini Model erfolgreich konfiguriert.")
-    except Exception as e:
-        print(f"DEBUG: Fehler bei der Konfiguration von Gemini: {e}")
-        model = None
-else:
-    print("DEBUG: FEHLER - API Key 'MEIN_GOOGLE_API_KEY' NICHT in Umgebungsvariablen gefunden!")
-    model = None
+# NEU: Konfiguration mit der neuen google-genai Bibliothek
+client = None
+MODEL_ID = "gemini-2.5-flash" # Das empfohlene, günstige & schnelle Modell
+
+try:
+    api_key = os.environ.get('MEIN_GOOGLE_API_KEY')
+    if api_key:
+        client = genai.Client(api_key=api_key)
+        print(f"DEBUG: Google GenAI Client erfolgreich konfiguriert für Modell: {MODEL_ID}")
+        # Optional: Modelle beim Start loggen (wie von ChatGPT vorgeschlagen)
+        try:
+            print("DEBUG: Verfügbare Modelle werden aufgelistet...")
+            for m in client.models.list():
+                 if "generateContent" in m.supported_generation_methods:
+                     print(f"DEBUG: Verfügbares Modell: {m.name}")
+            print("DEBUG: Modell-Listing abgeschlossen.")
+        except Exception as list_e:
+            print(f"DEBUG: Fehler beim Auflisten der Modelle: {list_e}")
+
+    else:
+        print("DEBUG: FEHLER - API Key 'MEIN_GOOGLE_API_KEY' NICHT in Umgebungsvariablen gefunden!")
+
+except Exception as e:
+    print(f"DEBUG: Schwerwiegender Fehler bei der Client-Konfiguration: {e}")
 
 
 @app.route('/', methods=['GET', 'POST'])
 def handle_request():
 
     if request.method == 'POST':
-        print("DEBUG: POST-Anfrage empfangen.") # NEU: Debugging
-        if model is None:
-            print("DEBUG: FEHLER - Modell nicht verfügbar.") # NEU: Debugging
+        print("DEBUG: POST-Anfrage empfangen.")
+        if client is None:
+            print("DEBUG: FEHLER - GenAI Client nicht verfügbar.")
             return jsonify({'reply': 'Entschuldigung, die KI ist gerade nicht verfügbar.'}), 500
 
         try:
@@ -85,35 +95,47 @@ def handle_request():
             data = request.json
             user_message = data.get('message', '')
             user_preferences = data.get('preferences', [])
-            print(f"DEBUG: Nachricht='{user_message}', Prefs={user_preferences}") # NEU: Debugging
+            print(f"DEBUG: Nachricht='{user_message}', Prefs={user_preferences}")
 
             # 2. Platzhalter für den Vornamen
             user_name = "Liebe Testerin"
 
             # 3. Den finalen Prompt für die KI zusammenbauen
+            # HINWEIS: Die Master-Anweisung ist sehr lang, wir übergeben sie direkt.
+            # Für komplexere Logik könnte man sie strukturierter übergeben.
             prompt_fuer_ki = f"{MASTER_ANWEISUNG}\n\n--- NEUE ANFRAGE ---\nName der Nutzerin: {user_name}\nNachricht: \"{user_message}\"\nPräferenzen: {', '.join(user_preferences)}"
-            print("DEBUG: Starte API-Anfrage an Gemini...") # NEU: Debugging
+            print(f"DEBUG: Starte API-Anfrage an Modell {MODEL_ID}...")
 
-            # 4. Anfrage an Gemini senden
-            response = model.generate_content(prompt_fuer_ki)
-            print("DEBUG: API-Antwort von Gemini erhalten.") # NEU: Debugging
+            # 4. Anfrage an Gemini senden (NEUE Syntax mit google-genai)
+            response = client.models.generate_content(
+                model=MODEL_ID,
+                contents=prompt_fuer_ki # Der Prompt wird direkt als 'contents' übergeben
+            )
+            print("DEBUG: API-Antwort von Gemini erhalten.")
 
             # 5. Antwort als JSON an das Frontend zurücksenden
-            return jsonify({'reply': response.text})
+            # Sicherstellen, dass response.text existiert, bevor darauf zugegriffen wird
+            reply_text = "Entschuldigung, ich konnte keine passende Antwort generieren."
+            if response and hasattr(response, 'text'):
+                reply_text = response.text
+            else:
+                 print(f"DEBUG: Unerwartete Antwortstruktur von der API: {response}")
+
+            return jsonify({'reply': reply_text})
+
 
         except Exception as e:
-            # NEU: Detailliertere Fehlerausgabe
             print(f"--- SCHWERWIEGENDER FEHLER BEI DER API-ANFRAGE ---")
             print(f"Fehlertyp: {type(e)}")
             print(f"Fehlermeldung: {e}")
             import traceback
-            traceback.print_exc() # Gibt den genauen Ort des Fehlers aus
+            traceback.print_exc()
             print(f"--- ENDE FEHLER ---")
             return jsonify({'reply': 'Oh, entschuldige. Meine Küche hat gerade ein kleines technisches Problem. Bitte versuche es in einem Moment noch einmal.'}), 500
 
     else:
         # Der GET-Test
-        return "Die Küche der Rezeptfreundin ist geöffnet und bereit für Anfragen!"
+        return "Die Küche der Rezeptfreundin (Version: google-genai) ist geöffnet!"
 
 if __name__ == '__main__':
     app.run()
