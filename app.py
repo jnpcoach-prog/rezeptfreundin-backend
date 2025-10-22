@@ -60,7 +60,7 @@ Bei Anfragen außerhalb deiner Mission, nutze den Satz: "Ich verstehe deine Frag
 
 # NEU: Konfiguriert die Gemini-API mit deinem Schlüssel aus Render
 try:
-    genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+    genai.configure(api_key=os.environ.get('MEIN_GOOGLE_API_KEY'))
     model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     print(f"Fehler bei der Konfiguration von Gemini: {e}")
