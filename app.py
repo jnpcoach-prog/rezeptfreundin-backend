@@ -61,7 +61,7 @@ if api_key:
     print("DEBUG: API Key erfolgreich aus Umgebungsvariable geladen.")
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-pro')
         print("DEBUG: Gemini Model erfolgreich konfiguriert.")
     except Exception as e:
         print(f"DEBUG: Fehler bei der Konfiguration von Gemini: {e}")
